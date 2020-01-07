@@ -38,11 +38,12 @@ public class TCPServer {
     HashMap<Socket, String> socketsId;
     Boolean stopSCmdThread = false;
     ArrayList<Socket> sockets;
-    DBConnection dbConnection = new DBConnection();
-    Session session;
 
-    Lock l = new ReentrantLock();
+    // Lock l = new ReentrantLock();
 
+    /**
+     * @param port If port is set to -1 localhost is used
+     */
     public TCPServer(int port) {
         Socket socket;
         ServerSocket server;
@@ -52,7 +53,10 @@ public class TCPServer {
         socketsId = new HashMap<>();
 
         try {
-            server = new ServerSocket(port);
+            if (port == -1)
+                server = new ServerSocket(9090, 0, InetAddress.getByName(null));
+            else
+                server = new ServerSocket(port);
             System.out.println(ANSI_GREEN + "Server started" + ANSI_RESET);
             System.out.println("Waiting for a client ...");
 
@@ -208,6 +212,7 @@ public class TCPServer {
             Command c = null;
             try {
                 c = new Command(cmd.split(","));
+                /*
                 l.lock();
                 session = dbConnection.getSessionFactory().getCurrentSession();
                 Transaction transaction = session.beginTransaction();
@@ -215,6 +220,8 @@ public class TCPServer {
                 transaction.commit();
                 session.close();
                 l.unlock();
+
+                */
 
                 System.out.println(ANSI_YELLOW + " [" + s.getInetAddress().getHostAddress() + "] " + c.getEntireString() + ANSI_RESET);
 

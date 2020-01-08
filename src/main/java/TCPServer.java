@@ -1,5 +1,5 @@
-
 import database.DBConnection;
+import database.UserInfos;
 import org.hibernate.Session;
 import org.hibernate.Transaction;
 
@@ -8,10 +8,7 @@ import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
-import java.text.DateFormat;
 import java.util.*;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 
 public class TCPServer {
 
@@ -32,14 +29,24 @@ public class TCPServer {
     public static final String ANSI_CYAN_BACKGROUND = "\u001B[46m";
     public static final String ANSI_WHITE_BACKGROUND = "\u001B[47m";
 
+    public static final int STARTING_STATE = 0;
+    public static final int USERNAME_ENTERED = 1;
+    public static final int PASSWORD_INFO_SENT = 2;
+    public static final int PASSWORD_VALIDATED = 3;
+
+
     //initialize socket and input stream
 
-    HashMap<InetAddress, Socket> socketsIP;
-    HashMap<Socket, String> socketsId;
-    Boolean stopSCmdThread = false;
-    ArrayList<Socket> sockets;
-
-    // Lock l = new ReentrantLock();
+    private HashMap<InetAddress, Socket> socketsIP;
+    private HashMap<Socket, String> socketsId;
+    private Boolean stopSCmdThread = false;
+    private ArrayList<Socket> sockets;
+    private int transactionState;
+    private boolean isUsernameCorrect;
+    private int currentSeed;
+    DBConnection dbConnection = new DBConnection();
+    Session session;
+//    Lock l = new ReentrantLock();
 
     /**
      * @param port If port is set to -1 localhost is used
@@ -51,6 +58,11 @@ public class TCPServer {
         sockets = new ArrayList<>();
         socketsIP = new HashMap<>();
         socketsId = new HashMap<>();
+        transactionState = 0;
+        isUsernameCorrect = false;
+
+        // TODO ADD SEEDS FOR EACH USER CONNECTION
+        currentSeed = (new Random()).nextInt(1000);
 
         try {
             if (port == -1)
@@ -100,8 +112,8 @@ public class TCPServer {
         Socket s;
         DataInputStream in;
         DataOutputStream out;
-        BufferedReader bufIn;
-        PrintWriter wrOut;
+        BufferedReader inputStream;
+        PrintWriter outputStream;
 
         public SocketLife(Socket s) {
             this.s = s;
@@ -110,41 +122,90 @@ public class TCPServer {
         @Override
         public void run() {
             try {
-                bufIn = new BufferedReader(new InputStreamReader(s.getInputStream()));
-                wrOut = new PrintWriter(s.getOutputStream(), true);
+                inputStream = new BufferedReader(new InputStreamReader(s.getInputStream()));
+                outputStream = new PrintWriter(s.getOutputStream(), true);
             } catch (IOException e) {
                 e.printStackTrace();
             }
 
             String line;
-            Command cmd;
-
+            UserInfos userInfos = null;
             while (true) {
+                if (transactionState == STARTING_STATE)
+                    userInfos = null;
                 try {
-                    line = bufIn.readLine();
-                    if (line == null)
-                        break;
-                    switch (line) {
-                        case "bonjour":
-                            wrOut.println("Bonjour a vous !");
-                            System.out.println("Connected clients :");
-                            for (Map.Entry<InetAddress, Socket> entry : socketsIP.entrySet()) {
-                                if (socketsId.containsKey(entry.getValue()))
-                                    System.out.println(entry.getKey() + " : " + entry.getValue().toString() + " identified as " + ANSI_PURPLE + socketsId.get(entry.getValue()) + ANSI_RESET);
-                                else
-                                    System.out.println(entry.getKey() + " : " + entry.getValue().toString());
+                    switch (transactionState) {
+                        case STARTING_STATE:
+                            line = inputStream.readLine();
+                            if (line == null)
+                                break;
+                            session = dbConnection.getSessionFactory().getCurrentSession();
+                            Transaction transaction = session.beginTransaction();
+                            List<UserInfos> queryResult = null;
+                            // TODO REMOVE USELESS TRY/CATCH
+                            try {
+                                queryResult = session.createSQLQuery("select * from USERINFOS where username = '" + line + "'").addEntity(UserInfos.class).list();
+                            }catch (Exception e){
+                                e.printStackTrace();
                             }
+                            transaction.commit();
+                            session.close();
+
+                            if (queryResult.size() > 0) {
+                                try {
+                                    userInfos = queryResult.get(0);
+                                } catch (Exception e) {
+                                    System.err.println(e.toString());
+                                }
+                                isUsernameCorrect = true;
+                                System.out.println(ANSI_CYAN + "User found in database" + ANSI_RESET);
+                            } else {
+                                userInfos = null;
+                                System.out.println(ANSI_CYAN + "User not found in database" + ANSI_RESET);
+                                isUsernameCorrect = false;
+                            }
+                            transactionState = USERNAME_ENTERED;
                             break;
-                        case "left":
-                            wrOut.println("Going Left");
+
+                        case USERNAME_ENTERED:
+                            if (isUsernameCorrect) {
+                                outputStream.println(userInfos.getSelX() + "," +
+                                        userInfos.getSelY() + "," +
+                                        currentSeed);
+                                System.out.println(ANSI_CYAN + "Sending : " +
+                                        userInfos.getSelX() + "," +
+                                        userInfos.getSelY() + "," +
+                                        currentSeed + ANSI_RESET);
+                            } else {
+                                String messageToSend = "";
+                                messageToSend += (new Random()).nextInt(1000) + ",";
+                                messageToSend += (new Random()).nextInt(1000) + "," + currentSeed;
+                                outputStream.println(messageToSend);
+                            }
+                            transactionState = PASSWORD_INFO_SENT;
                             break;
-                        case "right":
-                            wrOut.println("Going Right");
+                        case (PASSWORD_INFO_SENT):
+                            line = inputStream.readLine();
+                            if (line == null)
+                                break;
+                            if (userInfos != null) {
+                                if (line.equals(userInfos.getHashedPassword())) {
+                                    // TODO ADD CHECK WITH SEED
+                                    outputStream.println("correct");
+                                    transactionState = PASSWORD_VALIDATED;
+                                    System.out.println(ANSI_CYAN + "Received correct username/password from user" + ANSI_RESET);
+                                    break;
+                                }
+                            }
+                            outputStream.println("incorrect");
+                            System.out.println(ANSI_CYAN + "Received incorrect username/password from user" + ANSI_RESET);
+                            transactionState = STARTING_STATE;
+                            break;
+                        case PASSWORD_VALIDATED :
+                            // TODO FILL
                             break;
                         default:
-                            cmd = cmdParser(line);
-                            if (cmd != null)
-                                System.err.println(cmd.toString());
+                            System.err.println("Wrong value for transaction sate");
                             break;
                     }
 
@@ -169,22 +230,6 @@ public class TCPServer {
                     e.printStackTrace();
                 }
             }
-            if (socketsId.containsKey(s))
-                System.out.println(ANSI_RED + "Closing connection with " + socketsId.get(s) + " on " + s.getInetAddress().getHostAddress() + ANSI_RESET);
-            else
-                System.out.println(ANSI_RED + "Closing connection with " + s.getInetAddress().getHostAddress() + ANSI_RESET);
-            try {
-                closeConnection();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-
-        private Socket socketFromId(String id) {
-            for (Map.Entry<Socket, String> entry : socketsId.entrySet())
-                if (entry.getValue().equals(id))
-                    return entry.getKey();
-            return null;
         }
 
         private void closeConnection() throws IOException {
@@ -202,107 +247,5 @@ public class TCPServer {
             stopSCmdThread = true;
         }
 
-        private Command cmdParser(String cmd) {
-            Locale locale = new Locale("fr", "FR");
-            DateFormat dateFormat = DateFormat.getTimeInstance(DateFormat.DEFAULT, locale);
-            /*
-              DST,  SRC,   TIME,       TYPE,   PRIORITY,   SENS_ID,    VAL
-              STR, STR,    TIMESTAMP,  STR,    INT,        STR,        STR
-             */
-            Command c = null;
-            try {
-                c = new Command(cmd.split(","));
-                /*
-                l.lock();
-                session = dbConnection.getSessionFactory().getCurrentSession();
-                Transaction transaction = session.beginTransaction();
-                session.persist(c);
-                transaction.commit();
-                session.close();
-                l.unlock();
-
-                */
-
-                System.out.println(ANSI_YELLOW + " [" + s.getInetAddress().getHostAddress() + "] " + c.getEntireString() + ANSI_RESET);
-
-                switch (c.getType()) {
-                    case "AUTH":
-                        if (!socketsId.containsKey(s) && !socketsId.containsValue(c.getValue())) {
-                            socketsId.put(s, c.getValue());
-                            System.out.println(ANSI_CYAN + s.getInetAddress().getHostAddress() + " logged in as " + c.getValue() + ANSI_RESET);
-                            wrOut.println("You are now logged in as " + c.getValue());
-                        } else if (socketsId.containsKey(s))
-                            System.err.println(ANSI_CYAN + s.getInetAddress().getHostAddress() + " is already logged in." + ANSI_RESET);
-                        else
-                            System.err.println(ANSI_CYAN + c.getValue() + " is already logged in." + ANSI_RESET);
-                        break;
-                    case "PING":
-                        wrOut.println(ANSI_RED + "p" + ANSI_CYAN + "o" + ANSI_PURPLE + "n" + ANSI_GREEN + "g" + ANSI_RESET);
-                        System.out.println("[" + s.getInetAddress().getHostAddress() + "] " + ANSI_RED + "p" + ANSI_CYAN + "o" + ANSI_PURPLE + "n" + ANSI_GREEN + "g" + ANSI_RESET);
-                        break;
-                    case "LIST":
-                        if (!socketsId.containsKey(s)) {
-                            wrOut.println("You need to be authenticated to ask for the list.");
-                            break;
-                        }
-                        String out = "";
-                        for (Socket tmp_s : sockets) {
-                            if (socketsId.containsKey(tmp_s))
-                                out += (socketsId.get(tmp_s) + "@" + tmp_s.getInetAddress().getHostAddress() + ";");
-                            else
-                                out += (tmp_s.getInetAddress().getHostAddress() + ";");
-                        }
-                        out = out.substring(0, out.length() - 1);
-                        wrOut.println(socketsId.get(s) + ",SRV," + (new Date().getTime() / 1000) + ",LIST_ACK,-1,," + out);
-                        break;
-                    case "MSG":
-                        if (!socketsId.containsKey(s)) {
-                            wrOut.println("You need to be authenticated to send messages.");
-                            break;
-                        }
-
-                        String dst_id = c.getDestination();
-                        String src_id = c.getSource();
-                        // Sent to one client
-                        if ("OTHERS".equals(dst_id)) {  // Sent to every other client
-                            for (Socket t_s : sockets)
-                                if (t_s != s)
-                                    new PrintWriter(t_s.getOutputStream(), true).println(src_id + ":" + c.getValue());
-                        } else {
-                            if (socketFromId(dst_id) != null)
-                                new PrintWriter(socketFromId(dst_id).getOutputStream(), true).println(src_id + ":" + c.getValue());
-                            else
-                                wrOut.println(dst_id + " was not found.");
-                        }
-                        break;
-                    default:
-                        if (!socketsId.containsKey(s)) {
-                            wrOut.println("You need to be authenticated to send messages.");
-                            break;
-                        }
-
-                        String d_id = c.getDestination();
-                        switch (d_id) {
-                            case "OTHERS":  // Sent to every other client
-                                for (Socket t_s : sockets)
-                                    if (t_s != s)
-                                        new PrintWriter(t_s.getOutputStream(), true).println(c.getEntireString());
-                                break;
-                            default:    // Sent to one client
-                                if (socketFromId(d_id) != null)
-                                    new PrintWriter(socketFromId(d_id).getOutputStream(), true).println(c.getEntireString());
-                                else
-                                    wrOut.println(d_id + " was not found.");
-                                break;
-                        }
-                        break;
-                }
-            } catch (ArrayIndexOutOfBoundsException e) {
-                System.err.println("Missing parameters : " + cmd);
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-            return c;
-        }
     }
 }

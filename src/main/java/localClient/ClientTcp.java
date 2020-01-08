@@ -17,9 +17,7 @@ public class ClientTcp {
     private PrintWriter outputStream;
     private ListenerRunnable listenerRunnable;
     private ClientUI clientUI;
-
-    // TODO ADD LISTENING
-
+    
     public ClientTcp(ClientUI clientUI) {
         this.portNumber = 5000;
         this.address = "localhost";

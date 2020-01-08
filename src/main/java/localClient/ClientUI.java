@@ -18,8 +18,9 @@ public class ClientUI {
     private ClientTcp clientTcp;
 
     public ClientUI() {
-        clientTcp = new ClientTcp();
+        clientTcp = new ClientTcp(this);
         connectionButton.addActionListener(new ConnectionBehaviour());
+        sendButton.addActionListener(new SendingBehaviour());
     }
 
     private class ConnectionBehaviour implements ActionListener {
@@ -30,6 +31,16 @@ public class ClientUI {
                 if (clientTcp.connection()) {
                     connectionStatus.setText("Connection Status : Connected");
                 }
+            }
+        }
+    }
+
+    private class SendingBehaviour implements ActionListener {
+
+        @Override
+        public void actionPerformed(ActionEvent e) {
+            if (clientTcp.getConnected()) {
+                clientTcp.sendMessage(textField1.getText());
             }
         }
     }

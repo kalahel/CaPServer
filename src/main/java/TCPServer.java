@@ -103,7 +103,8 @@ public class TCPServer {
     }
 
     Thread.UncaughtExceptionHandler uncaughtExceptionHandler = (th, ex) -> {
-//        System.err.println("What happens in " + th.getName() + " stays in " + th.getName());
+        System.err.println("Error happened in " + th.getName() + " :");
+        ex.printStackTrace();
         stopSCmdThread = true;
     };
 
@@ -132,32 +133,23 @@ public class TCPServer {
             int currentSeed = (new Random()).nextInt(1000);
 
             while (true) {
-                if (transactionState == STARTING_STATE)
-                    userInfos = null;
+
                 try {
                     switch (transactionState) {
                         case STARTING_STATE:
+                            userInfos = null;
+                            currentSeed = (new Random()).nextInt(1000);
                             line = inputStream.readLine();
                             if (line == null)
                                 break;
                             session = dbConnection.getSessionFactory().getCurrentSession();
                             Transaction transaction = session.beginTransaction();
-                            List<UserInfos> queryResult = null;
-                            // TODO REMOVE USELESS TRY/CATCH
-                            try {
-                                queryResult = session.createSQLQuery("select * from USERINFOS where username = '" + line + "'").addEntity(UserInfos.class).list();
-                            } catch (Exception e) {
-                                e.printStackTrace();
-                            }
+                            List<UserInfos> queryResult = session.createSQLQuery("select * from USERINFOS where username = '" + line + "'").addEntity(UserInfos.class).list();
                             transaction.commit();
                             session.close();
 
                             if (queryResult.size() > 0) {
-                                try {
-                                    userInfos = queryResult.get(0);
-                                } catch (Exception e) {
-                                    System.err.println(e.toString());
-                                }
+                                userInfos = queryResult.get(0);
                                 isUsernameCorrect = true;
                                 System.out.println(ANSI_CYAN + "User found in database" + ANSI_RESET);
                             } else {
@@ -210,7 +202,8 @@ public class TCPServer {
                             line = inputStream.readLine();
                             if (line == null)
                                 break;
-                            if (Integer.getInteger(line) == userInfos.getBadgeId()) {
+
+                            if (Integer.parseInt(line) == userInfos.getBadgeId()) {
                                 outputStream.println("correct pin");
                                 transactionState = RECEIVING_RETINA_HASH_KEY;
                                 System.out.println(ANSI_GREEN + "Received correct badge id from user" + ANSI_RESET);
@@ -220,6 +213,7 @@ public class TCPServer {
                                 transactionState = STARTING_STATE;
                                 System.out.println(ANSI_YELLOW + "Received incorrect badge id from user" + ANSI_RESET);
                             }
+
                             break;
                         case RECEIVING_RETINA_HASH_KEY:
                             // TODO FILL

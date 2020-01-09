@@ -12,7 +12,10 @@ public class ClientTcp {
     public static final int USERNAME_ENTERED = 1;
     public static final int PASSWORD_INFO_SENT = 2;
     public static final int SENDING_BADGE_ID = 3;
-    public static final int RECEIVING_RETINA_HASH_KEY = 4;
+    public static final int BADGE_INFO_SENT = 4;
+    public static final int SENDING_RETINA_HASH_KEY = 5;
+    public static final int WAITING_FINAL_RESPONSE = 6;
+
 
     private Socket socket;
     private int portNumber;
@@ -27,6 +30,9 @@ public class ClientTcp {
     private int currentSeed;
     private int selX;
     private int selY;
+    private CardInterface cardInterface;
+    private String badgeId;
+    private String hashingRetina;
 
     public ClientTcp(ClientUI clientUI) {
         this.portNumber = 5000;
@@ -35,6 +41,7 @@ public class ClientTcp {
         this.shouldRun = true;
         this.clientUI = clientUI;
         this.transactionState = STARTING_STATE;
+        this.cardInterface = new CardPlaceHolder();
 
     }
 
@@ -96,6 +103,22 @@ public class ClientTcp {
         return selY;
     }
 
+    public CardInterface getCardInterface() {
+        return cardInterface;
+    }
+
+    public void setBadgeId(String badgeId) {
+        this.badgeId = badgeId;
+    }
+
+    public void setHashingRetina(String hashingRetina) {
+        this.hashingRetina = hashingRetina;
+    }
+
+    public String getHashingRetina() {
+        return hashingRetina;
+    }
+
     private class ListenerRunnable implements Runnable {
         private ClientUI clientUI;
         private ClientTcp clientTcp;
@@ -119,13 +142,19 @@ public class ClientTcp {
                             selX = Integer.parseInt(result[0]);
                             selY = Integer.parseInt(result[1]);
                             currentSeed = Integer.parseInt(result[2]);
-                        }else if(transactionState == PASSWORD_INFO_SENT){
+                        } else if (transactionState == PASSWORD_INFO_SENT) {
                             if (receivedString.equals("correct")) {
                                 transactionState = SENDING_BADGE_ID;
-                            }
-                            else{
+                            } else {
                                 transactionState = STARTING_STATE;
                             }
+                        } else if (transactionState == BADGE_INFO_SENT) {
+                            if (receivedString.equals("correct pin")) {
+                                transactionState = SENDING_RETINA_HASH_KEY;
+                            } else {
+                                transactionState = STARTING_STATE;
+                            }
+
                         }
 
                     } catch (IOException e) {

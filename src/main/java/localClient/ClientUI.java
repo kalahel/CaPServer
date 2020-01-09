@@ -48,20 +48,20 @@ public class ClientUI {
                         clientTcp.setTransactionState(ClientTcp.USERNAME_ENTERED);
                         break;
                     case ClientTcp.USERNAME_ENTERED:
-                        /*
-                        clientTcp.sendMessage(
-                                DatabaseFiller.hashPasswordWithSeed(clientTcp.getCurrentSeed(),
-                                        DatabaseFiller.hashPassword(clientTcp.getSelX(), clientTcp.getSelY(), textField1.getText())
-                                )
-                        );
-                        */
                         clientTcp.sendMessage(DatabaseFiller.hashPassword(clientTcp.getSelX(), clientTcp.getSelY(), textField1.getText()));
-                        /*System.out.println("Sending : " +
-                                DatabaseFiller.hashPasswordWithSeed(clientTcp.getCurrentSeed(),
-                                        DatabaseFiller.hashPassword(clientTcp.getSelX(), clientTcp.getSelY(), textField1.getText())
-                                ));*/
                         System.out.println(DatabaseFiller.hashPassword(clientTcp.getSelX(), clientTcp.getSelY(), textField1.getText()));
                         clientTcp.setTransactionState(ClientTcp.PASSWORD_INFO_SENT);
+                        break;
+                    case ClientTcp.SENDING_BADGE_ID:
+                        String[] result = clientTcp.getCardInterface().getCardInfos(textField1.getText()).split(",");
+                        clientTcp.setBadgeId(result[0]);
+                        clientTcp.setHashingRetina(result[1]);
+                        clientTcp.sendMessage(result[0]);
+                        clientTcp.setTransactionState(ClientTcp.BADGE_INFO_SENT);
+                        break;
+                    case ClientTcp.SENDING_RETINA_HASH_KEY:
+                        clientTcp.sendMessage(clientTcp.getHashingRetina());
+                        clientTcp.setTransactionState(ClientTcp.WAITING_FINAL_RESPONSE);
                         break;
                 }
             }

@@ -8,6 +8,12 @@ import java.net.Socket;
 import java.net.UnknownHostException;
 
 public class ClientTcp {
+    public static final int STARTING_STATE = 0;
+    public static final int USERNAME_ENTERED = 1;
+    public static final int PASSWORD_INFO_SENT = 2;
+    public static final int SENDING_BADGE_ID = 3;
+    public static final int RECEIVING_RETINA_HASH_KEY = 4;
+
     private Socket socket;
     private int portNumber;
     private String address;
@@ -17,13 +23,19 @@ public class ClientTcp {
     private PrintWriter outputStream;
     private ListenerRunnable listenerRunnable;
     private ClientUI clientUI;
-    
+    private int transactionState;
+    private int currentSeed;
+    private int selX;
+    private int selY;
+
     public ClientTcp(ClientUI clientUI) {
         this.portNumber = 5000;
         this.address = "localhost";
         this.isConnected = false;
         this.shouldRun = true;
         this.clientUI = clientUI;
+        this.transactionState = STARTING_STATE;
+
     }
 
     public Boolean connection() {
@@ -31,7 +43,7 @@ public class ClientTcp {
             socket = new Socket(this.address, this.portNumber);
             inputStream = new BufferedReader(new InputStreamReader(socket.getInputStream()));
             outputStream = new PrintWriter(socket.getOutputStream(), true);
-            listenerRunnable = new ListenerRunnable(clientUI,this);
+            listenerRunnable = new ListenerRunnable(clientUI, this);
             Thread listenerThread = new Thread(listenerRunnable);
             listenerThread.start();
 
@@ -64,6 +76,26 @@ public class ClientTcp {
         return inputStream;
     }
 
+    public int getTransactionState() {
+        return transactionState;
+    }
+
+    public void setTransactionState(int transactionState) {
+        this.transactionState = transactionState;
+    }
+
+    public int getCurrentSeed() {
+        return currentSeed;
+    }
+
+    public int getSelX() {
+        return selX;
+    }
+
+    public int getSelY() {
+        return selY;
+    }
+
     private class ListenerRunnable implements Runnable {
         private ClientUI clientUI;
         private ClientTcp clientTcp;
@@ -82,6 +114,20 @@ public class ClientTcp {
                         receivedString = clientTcp.getInputStream().readLine();
 //                        clientUI.getReceivedTextArea().setText("");
                         clientUI.getReceivedTextArea().append(receivedString + "\n");
+                        if (transactionState == USERNAME_ENTERED) {
+                            String[] result = receivedString.split(",");
+                            selX = Integer.parseInt(result[0]);
+                            selY = Integer.parseInt(result[1]);
+                            currentSeed = Integer.parseInt(result[2]);
+                        }else if(transactionState == PASSWORD_INFO_SENT){
+                            if (receivedString.equals("correct")) {
+                                transactionState = SENDING_BADGE_ID;
+                            }
+                            else{
+                                transactionState = STARTING_STATE;
+                            }
+                        }
+
                     } catch (IOException e) {
                         e.printStackTrace();
                     }

@@ -35,7 +35,7 @@ public class DatabaseFiller {
     public static String hashPassword(int selX, int selY, String password) {
         String result = "";
 
-        MessageDigest messageDigest = null;
+        MessageDigest messageDigest;
         try {
             messageDigest = MessageDigest.getInstance("MD5");
             messageDigest.update((selY + password).getBytes());
@@ -46,6 +46,22 @@ public class DatabaseFiller {
             messageDigest = MessageDigest.getInstance("MD5");
             messageDigest.update((selX + myHash).getBytes());
             digest = messageDigest.digest();
+            result = DatatypeConverter
+                    .printHexBinary(digest).toUpperCase();
+        } catch (NoSuchAlgorithmException e) {
+            e.printStackTrace();
+        }
+
+        return result;
+    }
+
+    public static String hashPasswordWithSeed(int seed, String hashedPassword) {
+        String result = "";
+        MessageDigest messageDigest;
+        try {
+            messageDigest = MessageDigest.getInstance("MD5");
+            messageDigest.update((seed + hashedPassword).getBytes());
+            byte[] digest = messageDigest.digest();
             result = DatatypeConverter
                     .printHexBinary(digest).toUpperCase();
         } catch (NoSuchAlgorithmException e) {

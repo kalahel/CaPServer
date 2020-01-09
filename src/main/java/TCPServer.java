@@ -1,4 +1,5 @@
 import database.DBConnection;
+import database.DatabaseFiller;
 import database.UserInfos;
 import org.hibernate.Session;
 import org.hibernate.Transaction;
@@ -32,7 +33,8 @@ public class TCPServer {
     public static final int STARTING_STATE = 0;
     public static final int USERNAME_ENTERED = 1;
     public static final int PASSWORD_INFO_SENT = 2;
-    public static final int PASSWORD_VALIDATED = 3;
+    public static final int RECEIVING_BADGE_ID = 3;
+    public static final int RECEIVING_RETINA_HASH_KEY = 4;
 
 
     //initialize socket and input stream
@@ -43,7 +45,6 @@ public class TCPServer {
     private ArrayList<Socket> sockets;
     private int transactionState;
     private boolean isUsernameCorrect;
-    private int currentSeed;
     DBConnection dbConnection = new DBConnection();
     Session session;
 //    Lock l = new ReentrantLock();
@@ -61,8 +62,6 @@ public class TCPServer {
         transactionState = 0;
         isUsernameCorrect = false;
 
-        // TODO ADD SEEDS FOR EACH USER CONNECTION
-        currentSeed = (new Random()).nextInt(1000);
 
         try {
             if (port == -1)
@@ -130,6 +129,8 @@ public class TCPServer {
 
             String line;
             UserInfos userInfos = null;
+            int currentSeed = (new Random()).nextInt(1000);
+
             while (true) {
                 if (transactionState == STARTING_STATE)
                     userInfos = null;
@@ -145,7 +146,7 @@ public class TCPServer {
                             // TODO REMOVE USELESS TRY/CATCH
                             try {
                                 queryResult = session.createSQLQuery("select * from USERINFOS where username = '" + line + "'").addEntity(UserInfos.class).list();
-                            }catch (Exception e){
+                            } catch (Exception e) {
                                 e.printStackTrace();
                             }
                             transaction.commit();
@@ -189,19 +190,38 @@ public class TCPServer {
                             if (line == null)
                                 break;
                             if (userInfos != null) {
+                                /*if (DatabaseFiller.hashPasswordWithSeed(currentSeed, line).equals(
+                                        DatabaseFiller.hashPasswordWithSeed(currentSeed, userInfos.getHashedPassword()))) {
+
+                                 */
                                 if (line.equals(userInfos.getHashedPassword())) {
                                     // TODO ADD CHECK WITH SEED
                                     outputStream.println("correct");
-                                    transactionState = PASSWORD_VALIDATED;
-                                    System.out.println(ANSI_CYAN + "Received correct username/password from user" + ANSI_RESET);
+                                    transactionState = RECEIVING_BADGE_ID;
+                                    System.out.println(ANSI_GREEN + "Received correct username/password from user" + ANSI_RESET);
                                     break;
                                 }
                             }
                             outputStream.println("incorrect");
-                            System.out.println(ANSI_CYAN + "Received incorrect username/password from user" + ANSI_RESET);
+                            System.out.println(ANSI_YELLOW + "Received incorrect username/password from user" + ANSI_RESET);
                             transactionState = STARTING_STATE;
                             break;
-                        case PASSWORD_VALIDATED :
+                        case RECEIVING_BADGE_ID:
+                            line = inputStream.readLine();
+                            if (line == null)
+                                break;
+                            if (Integer.getInteger(line) == userInfos.getBadgeId()) {
+                                outputStream.println("correct pin");
+                                transactionState = RECEIVING_RETINA_HASH_KEY;
+                                System.out.println(ANSI_GREEN + "Received correct badge id from user" + ANSI_RESET);
+
+                            } else {
+                                outputStream.println("incorrect pin");
+                                transactionState = STARTING_STATE;
+                                System.out.println(ANSI_YELLOW + "Received incorrect badge id from user" + ANSI_RESET);
+                            }
+                            break;
+                        case RECEIVING_RETINA_HASH_KEY:
                             // TODO FILL
                             break;
                         default:

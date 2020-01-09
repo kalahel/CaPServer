@@ -1,5 +1,7 @@
 package localClient;
 
+import database.DatabaseFiller;
+
 import javax.swing.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -40,7 +42,28 @@ public class ClientUI {
         @Override
         public void actionPerformed(ActionEvent e) {
             if (clientTcp.getConnected()) {
-                clientTcp.sendMessage(textField1.getText());
+                switch (clientTcp.getTransactionState()) {
+                    case ClientTcp.STARTING_STATE:
+                        clientTcp.sendMessage(textField1.getText());
+                        clientTcp.setTransactionState(ClientTcp.USERNAME_ENTERED);
+                        break;
+                    case ClientTcp.USERNAME_ENTERED:
+                        /*
+                        clientTcp.sendMessage(
+                                DatabaseFiller.hashPasswordWithSeed(clientTcp.getCurrentSeed(),
+                                        DatabaseFiller.hashPassword(clientTcp.getSelX(), clientTcp.getSelY(), textField1.getText())
+                                )
+                        );
+                        */
+                        clientTcp.sendMessage(DatabaseFiller.hashPassword(clientTcp.getSelX(), clientTcp.getSelY(), textField1.getText()));
+                        /*System.out.println("Sending : " +
+                                DatabaseFiller.hashPasswordWithSeed(clientTcp.getCurrentSeed(),
+                                        DatabaseFiller.hashPassword(clientTcp.getSelX(), clientTcp.getSelY(), textField1.getText())
+                                ));*/
+                        System.out.println(DatabaseFiller.hashPassword(clientTcp.getSelX(), clientTcp.getSelY(), textField1.getText()));
+                        clientTcp.setTransactionState(ClientTcp.PASSWORD_INFO_SENT);
+                        break;
+                }
             }
         }
     }
